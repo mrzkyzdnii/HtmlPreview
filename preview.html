@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>HTML Preview</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;background:#0b0f17;overflow:hidden}
+#root{height:100%;display:flex;flex-direction:column}
+#frame{border:none;width:100%;flex:1 1 auto;min-height:0;display:block;background:#fff}
+.empty{flex:1 1 auto;min-height:0;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:10px;color:#8b95a8;font-family:'Segoe UI',Arial,sans-serif;text-align:center;padding:24px}
+.empty h1{color:#e6e9ef;font-size:16px}
+.empty p{font-size:12px;max-width:340px;line-height:1.6}
+.empty a{color:#7dd3fc;text-decoration:none;font-size:12px;margin-top:6px}
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script>
+const root = document.getElementById('root');
+
+function base64ToBytes(value) {
+  value = value.replace(/-/g, '+').replace(/_/g, '/');
+  while (value.length % 4) value += '=';
+  const binary = atob(value);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+  return bytes;
+}
+
+function decompress(value) {
+  const bytes = base64ToBytes(value);
+  const out = new Uint8Array(
+    Array.from(bytes).reduce((n, _, i) => i % 2 === 0 ? n + bytes[i + 1] : n, 0)
+  );
+
+  let p = 0;
+  for (let i = 0; i < bytes.length; i += 2) {
+    const value = bytes[i];
+    const count = bytes[i + 1];
+    out.fill(value, p, p + count);
+    p += count;
+  }
+
+  return new TextDecoder().decode(out);
+}
+
+function getHtml() {
+  const hash = location.hash;
+
+  if (hash.startsWith('#data=')) {
+    try {
+      return decompress(hash.slice(6));
+    } catch (e) {
+      return null;
+    }
+  }
+
+  const params = new URLSearchParams(location.search);
+  const raw = params.get('html');
+
+  if (!raw) return null;
+
+  try {
+    return decodeURIComponent(raw);
+  } catch {
+    return raw;
+  }
+}
+
+const decoded = getHtml();
+
+if (!decoded) {
+  root.innerHTML =
+    '<div class="empty">' +
+    '<h1>⚠️ Tidak ada HTML untuk dipreview</h1>' +
+    '<p>Gunakan link preview yang dibuat dari halaman utama.</p>' +
+    '<a href="/">← Kembali ke HTML Preview Tool</a>' +
+    '</div>';
+} else {
+  const iframe = document.createElement('iframe');
+  iframe.id = 'frame';
+  iframe.setAttribute(
+    'sandbox',
+    'allow-scripts allow-forms allow-popups allow-modals allow-same-origin'
+  );
+  root.appendChild(iframe);
+  iframe.srcdoc = decoded;
+}
+</script>
+</body>
+</html>

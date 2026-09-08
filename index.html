@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>HTML Preview Tool</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:#080b12;color:#e8edf7;font-family:Inter,'Segoe UI',Arial,sans-serif;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px}
+.card{width:100%;max-width:760px;background:linear-gradient(180deg,#111827,#0e1420);border:1px solid #263044;border-radius:20px;padding:26px;box-shadow:0 20px 70px #0008}
+h1{font-size:21px;font-weight:800;margin-bottom:5px}
+.sub{font-size:12px;color:#8995aa;margin-bottom:22px}
+label{font-size:10px;color:#8995aa;letter-spacing:.7px;font-weight:700;display:block;margin-bottom:7px}
+textarea{width:100%;min-height:260px;background:#080c14;border:1px solid #263044;border-radius:13px;color:#e8edf7;font-family:Consolas,'Courier New',monospace;font-size:12.5px;padding:14px;resize:vertical;line-height:1.55;transition:.2s}
+textarea:focus{outline:none;border-color:#668cff;box-shadow:0 0 0 3px #668cff18}
+.row{display:flex;gap:10px;margin-top:14px;flex-wrap:wrap}
+button{cursor:pointer;border:none;border-radius:11px;padding:12px 18px;font-size:13px;font-weight:750;letter-spacing:.2px;transition:.18s}
+button:active{transform:scale(.98)}
+.primary{background:linear-gradient(135deg,#5b8cff,#8b5cf6);color:#fff;flex:1;min-width:180px}
+.secondary{background:#1a2333;color:#d0d8e8;border:1px solid #2b3850}
+button:disabled{opacity:.55;cursor:wait}
+.result{margin-top:18px;display:none}
+.result.show{display:block}
+.linkbox{background:#080c14;border:1px solid #263044;border-radius:11px;padding:12px;font-size:11.5px;word-break:break-all;color:#7dd3fc;font-family:monospace;cursor:pointer;min-height:42px}
+.status{font-size:10.5px;color:#8995aa;margin-top:9px;line-height:1.5}
+.hint{font-size:10.5px;color:#59657a;margin-top:12px;line-height:1.65}
+.badge{display:inline-block;background:#1a2333;color:#8e9bb0;font-size:9px;padding:3px 7px;border-radius:6px;margin-left:5px;letter-spacing:.4px}
+</style>
+</head>
+<body>
+<div class="card">
+<h1>🔗 HTML Preview Tool</h1>
+<div class="sub">Generate preview link otomatis. HTML pendek tetap memakai link ringan, HTML panjang otomatis dibuat menjadi file <b>.html</b>.</div>
+
+<label for="htmlInput">KODE HTML</label>
+<textarea id="htmlInput" placeholder="<h1>Halo dunia</h1>
+<p>Tulis HTML kamu di sini...</p>"></textarea>
+
+<div class="row">
+<button class="primary" id="btnGenerate">Generate Link</button>
+<button class="secondary" id="btnOpen">Buka Preview</button>
+</div>
+
+<div class="result" id="result">
+<label>LINK <span class="badge">klik untuk copy</span></label>
+<div class="linkbox" id="linkbox"></div>
+<div class="status" id="status"></div>
+</div>
+
+<div class="hint">
+HTML kecil → link preview langsung.<br>
+HTML panjang → otomatis disimpan sebagai <code>./temp/temp1.html</code> di server dan link <code>/temp/temp1.html</code> diberikan.
+</div>
+</div>
+
+<script>
+const htmlInput=document.getElementById('htmlInput')
+const result=document.getElementById('result')
+const linkbox=document.getElementById('linkbox')
+const status=document.getElementById('status')
+const btnGenerate=document.getElementById('btnGenerate')
+const btnOpen=document.getElementById('btnOpen')
+
+function compress(str){
+ const input=new TextEncoder().encode(str),out=[]
+ let last=-1,count=0
+ for(let i=0;i<input.length;i++){
+  const b=input[i]
+  if(b===last&&count<255) count++
+  else{
+   if(last!==-1) out.push(last,count)
+   last=b;count=1
+  }
+ }
+ if(last!==-1) out.push(last,count)
+ const packed=new Uint8Array(out)
+ let binary=''
+ for(let i=0;i<packed.length;i+=0x8000) binary+=String.fromCharCode(...packed.subarray(i,i+0x8000))
+ return btoa(binary).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'')
+}
+
+function shortUrl(){
+ return location.origin+'/preview#data='+compress(htmlInput.value)
+}
+
+async function createFile(){
+ const response=await fetch('/api/save-html',{
+  method:'POST',
+  headers:{'Content-Type':'application/json'},
+  body:JSON.stringify({html:htmlInput.value})
+ })
+ const data=await response.json().catch(()=>({}))
+ if(!response.ok||!data.url) throw new Error(data.error||'Gagal membuat file HTML')
+ return data.url
+}
+
+async function generate(){
+ const code=htmlInput.value
+ if(!code.trim()) return
+ btnGenerate.disabled=true
+ btnOpen.disabled=true
+ status.textContent='⏳ Menyiapkan link...'
+ try{
+  const compressed=compress(code)
+  const normal=location.origin+'/preview#data='+compressed
+  if(normal.length<=1800){
+   linkbox.textContent=normal
+   status.textContent='⚡ HTML cukup pendek, link preview langsung digunakan.'
+  }else{
+   const url=await createFile()
+   linkbox.textContent=url
+   status.textContent='📄 HTML panjang terdeteksi, file otomatis dibuat sebagai temp1.html.'
+  }
+  result.classList.add('show')
+ }catch(e){
+  status.textContent='❌ '+e.message
+  result.classList.add('show')
+ }finally{
+  btnGenerate.disabled=false
+  btnOpen.disabled=false
+ }
+}
+
+btnGenerate.addEventListener('click',generate)
+btnOpen.addEventListener('click',async()=>{
+ if(!htmlInput.value.trim()) return
+ await generate()
+ if(linkbox.textContent) window.open(linkbox.textContent,'_blank')
+})
+linkbox.addEventListener('click',async()=>{
+ const value=linkbox.textContent
+ if(!value||value.startsWith('✅')) return
+ try{
+  await navigator.clipboard.writeText(value)
+ }catch{
+  const area=document.createElement('textarea')
+  area.value=value
+  document.body.appendChild(area)
+  area.select()
+  document.execCommand('copy')
+  area.remove()
+ }
+ const old=value
+ linkbox.textContent='✅ Disalin!'
+ setTimeout(()=>linkbox.textContent=old,900)
+})
+htmlInput.addEventListener('keydown',e=>{
+ if((e.ctrlKey||e.metaKey)&&e.key==='Enter'){e.preventDefault();generate()}
+})
+</script>
+</body>
+</html>
